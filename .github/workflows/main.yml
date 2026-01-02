@@ -15,7 +15,7 @@ jobs:
     - name: Checkout Code
       uses: actions/checkout@v4
       with:
-        fetch-depth: 0 # Required for GitVersion to see history
+        fetch-depth: 0 # Critical for GitVersion to work
 
     - name: Install GitVersion
       uses: gittools/actions/gitversion/setup@v1
@@ -24,6 +24,9 @@ jobs:
 
     - name: Execute GitVersion
       uses: gittools/actions/gitversion/execute@v1
+      with:
+        # Disabling 'updateAssemblyInfo' avoids the CS2001: GitVersion.cs not found error
+        updateAssemblyInfo: false 
 
     - name: Setup MSBuild
       uses: microsoft/setup-msbuild@v2
@@ -32,23 +35,26 @@ jobs:
       uses: NuGet/setup-nuget@v1
 
     - name: Restore NuGet Packages
-      run: nuget restore QuickLook.Plugin.ImageViewer-with-LiveText.sln
+      run: |
+        # This finds the .sln file even if it's in a subfolder
+        $slnPath = Get-ChildItem -Recurse -Filter *.sln | Select-Object -First 1 -ExpandProperty FullName
+        nuget restore "$slnPath"
+        echo "SLN_PATH=$slnPath" >> $env:GITHUB_ENV
 
-    # FIX: Prevent CS2001 by creating a dummy GitVersion.cs if the tool fails to place it correctly
-    # or by telling MSBuild to ignore the missing file if it's generated dynamically.
     - name: Build Plugin
       run: |
-        msbuild QuickLook.Plugin.ImageViewer-with-LiveText.sln `
+        # Uses the path discovered in the previous step
+        msbuild "${{ env.SLN_PATH }}" `
         /p:Configuration=Release `
         /p:Platform="Any CPU" `
         /p:UpdateAssemblyInfo=false `
-        /p:WriteVersionInfoToBuildLog=false
-      # Using UpdateAssemblyInfo=false prevents GitVersion from looking for/writing to specific .cs files that cause CS2001.
+        /p:GenerateGitVersionInformation=false
+      # Disabling GenerateGitVersionInformation prevents MSBuild from looking for that missing .cs file
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: QuickLook.Plugin.ImageViewer-with-LiveText
+        name: QuickLook.Plugin.ImageViewer
         path: |
           **/bin/Release/*.qlplugin
           **/bin/Release/*.dll
