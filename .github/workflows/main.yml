@@ -13,13 +13,13 @@ jobs:
     - name: Checkout Your Plugin
       uses: actions/checkout@v4
       with:
-        path: plugin-repo  # Puts your code in a subfolder
+        path: plugin-repo
 
     - name: Checkout QuickLook Common (The Parent)
       uses: actions/checkout@v4
       with:
         repository: QL-Win/QuickLook.Common
-        path: QuickLook.Common  # Puts the parent where the dots ..\..\ expect it
+        path: QuickLook.Common
 
     - name: Checkout HtmlViewer (The Sibling)
       uses: actions/checkout@v4
@@ -32,19 +32,24 @@ jobs:
     - name: Setup MSBuild
       uses: microsoft/setup-msbuild@v2
 
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '8.0.x' # Matches standard QuickLook builds
+
     - name: Prepare Workspace & Build
+      shell: pwsh
       run: |
-        # 1. Create the GitVersion.cs file at the root (..\..\GitVersion.cs)
+        # 1. Create the GitVersion.cs file exactly where the .csproj wants it (../../GitVersion.cs)
+        # Since we are in the root and the proj is in plugin-repo/, this is correct.
         New-Item -Path "GitVersion.cs" -ItemType File -Force
 
-        # 2. Move things so the relative paths match the .csproj
-        # Your proj is in ./plugin-repo/
-        # It looks for ../../QuickLook.Common
-        # So we leave QuickLook.Common in the root.
+        # 2. RESTORE: This generates the 'project.assets.json' file you were missing
+        # We run it on the folder containing the projects
+        dotnet restore ./plugin-repo/QuickLook.Plugin.ImageViewer.csproj
 
+        # 3. BUILD
         cd plugin-repo
-        
-        # 3. Build using the project file
         msbuild QuickLook.Plugin.ImageViewer.csproj `
           /p:Configuration=Release `
           /p:Platform="Any CPU" `
