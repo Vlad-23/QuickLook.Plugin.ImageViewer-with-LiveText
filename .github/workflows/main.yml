@@ -18,28 +18,28 @@ jobs:
     - name: Setup MSBuild
       uses: microsoft/setup-msbuild@v2
 
-    - name: Setup NuGet
-      uses: NuGet/setup-nuget@v1
-
-    - name: Resolve Missing Core Dependencies
+    - name: Get Core Dependencies
+      shell: pwsh
       run: |
-        # This downloads the official QuickLook.Common and QuickLook.Plugin DLLs
-        # which are the "Parent" libraries your code is looking for.
-        mkdir ql_libs
-        nuget install QuickLook.Plugin -Version 0.6.0 -OutputDirectory ./ql_libs
+        # 1. Download the latest QuickLook release to get the 'Common' and 'Plugin' DLLs
+        $url = "https://github.com/QL-Win/QuickLook/releases/download/3.7.3/QuickLook.Zip.zip"
+        Invoke-WebRequest -Uri $url -OutFile "QuickLook.zip"
         
-        # We find where NuGet put the DLLs and copy them to a central 'ref' folder
+        # 2. Extract it to a temporary folder
+        Expand-Archive -Path "QuickLook.zip" -DestinationPath "./temp_ql"
+        
+        # 3. Create a 'ref' folder and move the necessary DLLs there
         mkdir ref
-        Get-ChildItem -Path ./ql_libs -Filter *.dll -Recurse | Copy-Item -Destination ./ref/
-        Write-Host "Dependencies ready in ./ref folder"
+        Copy-Item "./temp_ql/QuickLook.Common.dll" -Destination "./ref/"
+        Copy-Item "./temp_ql/QuickLook.Plugin.dll" -Destination "./ref/"
+        Write-Host "Core DLLs extracted to ./ref folder"
 
     - name: Fix GitVersion & Build
       run: |
-        # 1. Satisfy the GitVersion.cs requirement (The CS2001 error)
+        # Create the missing version file to stop the CS2001 error
         New-Item -Path "GitVersion.cs" -ItemType File -Force
 
-        # 2. Build while forcing the compiler to look in our new 'ref' folder
-        # This solves the 59 errors (Missing Common, IViewer, etc.)
+        # Build the project, pointing to our newly extracted reference DLLs
         msbuild QuickLook.Plugin.ImageViewer.csproj `
           /p:Configuration=Release `
           /p:Platform="Any CPU" `
