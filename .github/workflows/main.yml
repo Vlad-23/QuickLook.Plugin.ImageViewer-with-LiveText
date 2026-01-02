@@ -13,13 +13,14 @@ jobs:
     - name: Checkout Your Plugin
       uses: actions/checkout@v4
       with:
-        path: working_dir/plugin-repo
+        # Puts your plugin directly in the root of the workspace
+        path: QuickLook.Plugin.ImageViewer-with-LiveText
 
     - name: Checkout QuickLook Common
       uses: actions/checkout@v4
       with:
         repository: QL-Win/QuickLook.Common
-        path: working_dir/QuickLook.Common
+        path: QuickLook.Common
 
     - name: Checkout HtmlViewer (The Sibling)
       uses: actions/checkout@v4
@@ -27,7 +28,7 @@ jobs:
         repository: QL-Win/QuickLook
         sparse-checkout: |
           QuickLook.Plugin/QuickLook.Plugin.HtmlViewer
-        path: working_dir/QuickLook.Plugin.HtmlViewer
+        path: QuickLook.Plugin.HtmlViewer
 
     - name: Setup MSBuild
       uses: microsoft/setup-msbuild@v2
@@ -35,18 +36,21 @@ jobs:
     - name: Prepare & Build
       shell: pwsh
       run: |
-        # 1. Create GitVersion.cs (Satisfies ..\..\GitVersion.cs)
-        New-Item -Path "working_dir/GitVersion.cs" -ItemType File -Force
+        # 1. Create GitVersion.cs at the root level.
+        # From inside the plugin folder, ../../GitVersion.cs will now point here.
+        $content = 'using System.Reflection; [assembly: AssemblyVersion("1.0.0.0")] [assembly: AssemblyFileVersion("1.0.0.0")]'
+        New-Item -Path "GitVersion.cs" -ItemType File -Value $content -Force
 
-        # 2. Restore
-        dotnet restore working_dir/plugin-repo/QuickLook.Plugin.ImageViewer.csproj
+        # 2. Restore using the project file
+        dotnet restore QuickLook.Plugin.ImageViewer-with-LiveText/QuickLook.Plugin.ImageViewer.csproj
 
-        # 3. Build (With Pre-Build Events DISABLED)
-        msbuild working_dir/plugin-repo/QuickLook.Plugin.ImageViewer.csproj `
+        # 3. Build with overridden paths to ensure success
+        msbuild QuickLook.Plugin.ImageViewer-with-LiveText/QuickLook.Plugin.ImageViewer.csproj `
           /p:Configuration=Release `
           /p:Platform="Any CPU" `
           /p:PreBuildEvent="" `
           /p:PostBuildEvent="" `
+          /p:GenerateGitVersionInformation=false `
           /p:OutputPath="${{ github.workspace }}\build_output\"
 
     - name: Upload Finished Plugin
