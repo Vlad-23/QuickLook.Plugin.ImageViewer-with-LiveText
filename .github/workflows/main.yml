@@ -1,9 +1,7 @@
-name: Build and Release QuickLook Plugin
+name: Build QuickLook Plugin
 
 on:
   push:
-    branches: [ "main" ]
-  pull_request:
     branches: [ "main" ]
   workflow_dispatch:
 
@@ -23,41 +21,30 @@ jobs:
     - name: Setup NuGet
       uses: NuGet/setup-nuget@v1
 
-    # This step will help us see exactly where your files are if the build fails
-    - name: Directory Listing Debug
-      run: Get-ChildItem -Recurse | Select-Object FullName
-
-    - name: Locate and Restore
+    - name: Restore and Build
       run: |
-        # Search for any .sln file in the workspace
-        $sln = Get-ChildItem -Path ${{ github.workspace }} -Filter *.sln -Recurse | Select-Object -First 1
-        
-        if ($null -eq $sln) {
-            Write-Host "No .sln found, searching for .csproj instead..."
-            $sln = Get-ChildItem -Path ${{ github.workspace }} -Filter *.csproj -Recurse | Select-Object -First 1
-        }
+        # 1. Find the solution or project file
+        $target = Get-ChildItem -Recurse -Include *.sln, *.csproj | Select-Object -First 1
+        if ($null -eq $target) { throw "No buildable file found!" }
+        Write-Host "Building: $($target.FullName)"
 
-        if ($null -eq $sln) {
-            throw "Could not find any Solution (.sln) or Project (.csproj) file!"
-        }
+        # 2. Restore
+        nuget restore "$($target.FullName)"
 
-        Write-Host "Target found at: $($sln.FullName)"
-        echo "TARGET_PATH=$($sln.FullName)" >> $env:GITHUB_ENV
-        nuget restore "$($sln.FullName)"
-
-    - name: Build Plugin
-      run: |
-        # We disable GitVersion generation to bypass the CS2001 error
-        # We also force the output to a specific 'dist' folder
-        msbuild "${{ env.TARGET_PATH }}" `
+        # 3. Build with flags to KILL the GitVersion error
+        # /p:GenerateGitVersionInformation=false prevents the search for GitVersion.cs
+        # /p:UpdateAssemblyInfo=false prevents writing to non-existent files
+        msbuild "$($target.FullName)" `
           /p:Configuration=Release `
           /p:Platform="Any CPU" `
-          /p:UpdateAssemblyInfo=false `
           /p:GenerateGitVersionInformation=false `
-          /p:OutputPath="${{ github.workspace }}\dist\"
+          /p:UpdateAssemblyInfo=false `
+          /p:GetFullMessage=true `
+          /p:OutputPath="${{ github.workspace }}\out\"
 
-    - name: Upload Artifact
+    - name: Upload Build Output
       uses: actions/upload-artifact@v4
       with:
-        name: QuickLook-Plugin-Output
-        path: ${{ github.workspace }}\dist\
+        name: QuickLook-Plugin-Fixed
+        path: ${{ github.workspace }}\out\
+        
