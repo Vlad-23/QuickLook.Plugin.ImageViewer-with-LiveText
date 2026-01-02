@@ -1,4 +1,4 @@
-name: Build Plugin (Flat Approach)
+name: Build Plugin
 
 on:
   push:
@@ -10,26 +10,33 @@ jobs:
     runs-on: windows-2025
 
     steps:
-      # 1. Checkout the plugin to the root 'plugin' folder
+      - name: Setup Workspace Structure
+        run: |
+          # Create a nested structure so ..\..\ stays inside our reach
+          mkdir -p "working/src/plugin"
+          mkdir -p "working/QuickLook.Common"
+          mkdir -p "working/QuickLook.Plugin.HtmlViewer"
+
+      # 1. Checkout into the deep folder
       - name: Checkout Plugin
         uses: actions/checkout@v4
         with:
-          path: plugin
+          path: working/src/plugin
 
-      # 2. Checkout Common to the root 'QuickLook.Common' folder
+      # 2. Checkout Common as a sibling to 'src'
       - name: Checkout QuickLook.Common
         uses: actions/checkout@v4
         with:
           repository: QL-Win/QuickLook.Common
-          path: QuickLook.Common
+          path: working/QuickLook.Common
 
-      # 3. Checkout HtmlViewer to the root 'QuickLook.Plugin.HtmlViewer' folder
+      # 3. Checkout HtmlViewer
       - name: Checkout HtmlViewer
         uses: actions/checkout@v4
         with:
           repository: QL-Win/QuickLook
           sparse-checkout: QuickLook.Plugin/QuickLook.Plugin.HtmlViewer
-          path: QuickLook.Plugin.HtmlViewer
+          path: working/QuickLook.Plugin.HtmlViewer
 
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
@@ -39,22 +46,23 @@ jobs:
       - name: Build
         shell: pwsh
         run: |
-          # Create GitVersion.cs at the same level as the folders
+          # LANDING ZONE: This is where ..\..\GitVersion.cs will point to
           $versionContent = 'using System.Reflection; [assembly: AssemblyVersion("1.0.0.0")]'
-          New-Item -Path "GitVersion.cs" -ItemType File -Value $versionContent -Force
+          New-Item -Path "working/GitVersion.cs" -ItemType File -Value $versionContent -Force
 
-          # Navigate into the project folder to run restore and build
-          cd plugin
+          # Navigate to the ACTUAL project file
+          cd working/src/plugin
 
           dotnet restore QuickLook.Plugin.ImageViewer.csproj
 
+          # Build while ignoring the Pre/Post events that usually cause issues in CI
           msbuild QuickLook.Plugin.ImageViewer.csproj `
             /p:Configuration=Release `
             /p:Platform="Any CPU" `
             /p:PreBuildEvent="" `
             /p:PostBuildEvent="" `
             /p:GenerateGitVersionInformation=false `
-            /p:OutputPath="../build_output/"
+            /p:OutputPath="../../../build_output/"
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
