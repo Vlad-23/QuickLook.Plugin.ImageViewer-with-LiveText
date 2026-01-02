@@ -13,31 +13,40 @@ jobs:
     - name: Checkout Your Plugin
       uses: actions/checkout@v4
       with:
-        path: working_dir/plugin-repo # Moved deeper to satisfy ..\..\
+        path: working_dir/plugin-repo
 
     - name: Checkout QuickLook Common
       uses: actions/checkout@v4
       with:
         repository: QL-Win/QuickLook.Common
-        path: QuickLook.Common # Now matches ..\..\QuickLook.Common from the plugin
+        path: working_dir/QuickLook.Common
+
+    - name: Checkout HtmlViewer (The Sibling)
+      uses: actions/checkout@v4
+      with:
+        repository: QL-Win/QuickLook
+        sparse-checkout: |
+          QuickLook.Plugin/QuickLook.Plugin.HtmlViewer
+        path: working_dir/QuickLook.Plugin.HtmlViewer
 
     - name: Setup MSBuild
       uses: microsoft/setup-msbuild@v2
 
-    - name: Prepare Workspace & Build
+    - name: Prepare & Build
       shell: pwsh
       run: |
-        # 1. Create GitVersion.cs in the root
-        # This matches ..\..\GitVersion.cs relative to the project file
-        New-Item -Path "GitVersion.cs" -ItemType File -Force
+        # 1. Create GitVersion.cs (Satisfies ..\..\GitVersion.cs)
+        New-Item -Path "working_dir/GitVersion.cs" -ItemType File -Force
 
-        # 2. Restore and Build
-        # We target the project now sitting two levels down
-        dotnet restore ./working_dir/plugin-repo/QuickLook.Plugin.ImageViewer.csproj
+        # 2. Restore
+        dotnet restore working_dir/plugin-repo/QuickLook.Plugin.ImageViewer.csproj
 
-        msbuild ./working_dir/plugin-repo/QuickLook.Plugin.ImageViewer.csproj `
+        # 3. Build (With Pre-Build Events DISABLED)
+        msbuild working_dir/plugin-repo/QuickLook.Plugin.ImageViewer.csproj `
           /p:Configuration=Release `
           /p:Platform="Any CPU" `
+          /p:PreBuildEvent="" `
+          /p:PostBuildEvent="" `
           /p:OutputPath="${{ github.workspace }}\build_output\"
 
     - name: Upload Finished Plugin
