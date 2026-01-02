@@ -10,62 +10,68 @@ jobs:
     runs-on: windows-2025
 
     steps:
-      - name: Setup Workspace Structure
+      # 1. Setup the directory tree
+      # Level 0: QuickLook.Common & GitVersion.cs
+      # Level 1: QuickLook.Plugin.HtmlViewer & ImageViewer (your repo)
+      - name: Checkout Repositories
         run: |
-          # Create a nested structure so ..\..\ stays inside our reach
-          mkdir -p "working/src/plugin"
-          mkdir -p "working/QuickLook.Common"
-          mkdir -p "working/QuickLook.Plugin.HtmlViewer"
+          mkdir -p "workspace/QuickLook.Common"
+          mkdir -p "workspace/ImageViewer"
+          mkdir -p "workspace/QuickLook.Plugin.HtmlViewer"
 
-      # 1. Checkout into the deep folder
-      - name: Checkout Plugin
+      - name: Checkout ImageViewer (Main)
         uses: actions/checkout@v4
         with:
-          path: working/src/plugin
+          path: workspace/ImageViewer
 
-      # 2. Checkout Common as a sibling to 'src'
       - name: Checkout QuickLook.Common
         uses: actions/checkout@v4
         with:
           repository: QL-Win/QuickLook.Common
-          path: working/QuickLook.Common
+          path: workspace/QuickLook.Common
 
-      # 3. Checkout HtmlViewer
       - name: Checkout HtmlViewer
         uses: actions/checkout@v4
         with:
           repository: QL-Win/QuickLook
           sparse-checkout: QuickLook.Plugin/QuickLook.Plugin.HtmlViewer
-          path: working/QuickLook.Plugin.HtmlViewer
+          path: workspace/temp_html
+      
+      - name: Align HtmlViewer Path
+        shell: pwsh
+        run: |
+          # Move the nested sparse-checkout folder to the level expected by ..\
+          Move-Item -Path "workspace/temp_html/QuickLook.Plugin/QuickLook.Plugin.HtmlViewer/*" -Destination "workspace/QuickLook.Plugin.HtmlViewer/"
 
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
-        with:
-          msbuild-architecture: x86
 
       - name: Build
         shell: pwsh
         run: |
-          # LANDING ZONE: This is where ..\..\GitVersion.cs will point to
-          $versionContent = 'using System.Reflection; [assembly: AssemblyVersion("1.0.0.0")]'
-          New-Item -Path "working/GitVersion.cs" -ItemType File -Value $versionContent -Force
+          # Create GitVersion.cs at Level 0 (..\..\ from the project)
+          $v = 'using System.Reflection; [assembly: AssemblyVersion("1.0.0.0")]'
+          New-Item -Path "workspace/GitVersion.cs" -ItemType File -Value $v -Force
 
-          # Navigate to the ACTUAL project file
-          cd working/src/plugin
+          # Build dependencies so the DLLs/Namespaces exist
+          msbuild "workspace/QuickLook.Common/QuickLook.Common.csproj" /p:Configuration=Release /p:Platform="Any CPU"
+          msbuild "workspace/QuickLook.Plugin.HtmlViewer/QuickLook.Plugin.HtmlViewer.csproj" /p:Configuration=Release /p:Platform="Any CPU"
 
+          # Build Main Project
+          cd workspace/ImageViewer
           dotnet restore QuickLook.Plugin.ImageViewer.csproj
-
-          # Build while ignoring the Pre/Post events that usually cause issues in CI
+          
+          # We use the OutputPath from your csproj or override it here
           msbuild QuickLook.Plugin.ImageViewer.csproj `
             /p:Configuration=Release `
             /p:Platform="Any CPU" `
             /p:PreBuildEvent="" `
             /p:PostBuildEvent="" `
             /p:GenerateGitVersionInformation=false `
-            /p:OutputPath="../../../build_output/"
+            /p:OutputPath="../../build_output/"
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: QuickLook.Plugin.ImageViewer
-          path: build_output/
+          path: workspace/build_output/
