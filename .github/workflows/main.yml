@@ -21,34 +21,39 @@ jobs:
     - name: Setup NuGet
       uses: NuGet/setup-nuget@v1
 
-    - name: Force Create GitVersion Files
+    - name: Ingest QuickLook Dependencies
       run: |
-        # 1. Create file in the current workspace root
-        New-Item -Path "GitVersion.cs" -ItemType File -Force
-        
-        # 2. Create file in the parent of the workspace (to handle ..\..\ logic)
-        New-Item -Path "../GitVersion.cs" -ItemType File -Force
-        New-Item -Path "../../GitVersion.cs" -ItemType File -Force
-        
-        # 3. Find every directory containing a .csproj and put a GitVersion.cs two levels up from it
+        # 1. Create a dummy GitVersion.cs to stop the CS2001 error
         $projects = Get-ChildItem -Recurse -Filter *.csproj
         foreach ($proj in $projects) {
             $grandParent = $proj.Directory.Parent.Parent.FullName
             if (-not (Test-Path $grandParent)) { New-Item -ItemType Directory -Path $grandParent -Force }
             New-Item -Path "$grandParent\GitVersion.cs" -ItemType File -Force
-            Write-Host "Injected dummy file at: $grandParent\GitVersion.cs"
         }
+
+        # 2. Fix the "QuickLook.Common" issue
+        # We download the QuickLook.Plugin NuGet package and extract the DLLs 
+        # to a folder that MSBuild can see.
+        nuget install QuickLook.Plugin -Version 0.6.0 -OutputDirectory ./deps
+        
+        # We copy the DLLs to the root or where the project might look for them
+        $libPath = Get-ChildItem -Path ./deps -Filter QuickLook.Plugin.dll -Recurse | Select-Object -First 1
+        $binDir = $libPath.Directory.FullName
+        copy "$binDir\*.dll" "."
+        Write-Host "Injected QuickLook dependencies from NuGet."
 
     - name: Restore and Build
       run: |
         $target = Get-ChildItem -Recurse -Include *.sln, *.csproj | Select-Object -First 1
         
+        # Restore packages
         nuget restore "$($target.FullName)"
 
-        # We keep the flags as a backup, but the physical file is now the primary fix
+        # Build with ReferencePath set to current dir so it finds the DLLs we just downloaded
         msbuild "$($target.FullName)" `
           /p:Configuration=Release `
           /p:Platform="Any CPU" `
+          /p:ReferencePath="${{ github.workspace }}" `
           /p:GenerateGitVersionInformation=false `
           /p:UpdateAssemblyInfo=false `
           /p:OutputPath="${{ github.workspace }}\out\"
@@ -56,5 +61,5 @@ jobs:
     - name: Upload Build Output
       uses: actions/upload-artifact@v4
       with:
-        name: QuickLook-Plugin-Final
+        name: QuickLook-Plugin-Complete
         path: ${{ github.workspace }}\out\
