@@ -131,7 +131,7 @@
                     VerticalAlignment="Top"
                     Content="&#xE13E;"
                     Style="{StaticResource CaptionButtonStyle}"
-                    ToolTip="Live Text (Make text in image selectable and copyable)"
+                    ToolTip="Live Text (Make text in image selectable)"
                     Visibility="{Binding ElementName=imagePanel, Path=LiveTextVisibility}" />
             <Button x:Name="buttonMeta"
                     Width="24"
