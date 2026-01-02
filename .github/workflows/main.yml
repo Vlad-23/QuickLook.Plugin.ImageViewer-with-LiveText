@@ -3,12 +3,11 @@ name: Build QuickLook ImageViewer Plugin
 on:
   push:
     branches:
-      - main       # or your default branch
+      - main
   pull_request:
 
 jobs:
   build:
-    name: Build & Package Plugin
     runs-on: windows-latest
 
     steps:
@@ -18,7 +17,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v3
         with:
-          dotnet-version: '7.0.x'  # matches typical QuickLook plugin targets
+          dotnet-version: '7.0.x'
 
       - name: Restore dependencies
         run: dotnet restore QuickLook.Plugin.ImageViewer.csproj
@@ -37,7 +36,7 @@ jobs:
           Compress-Archive -Path plugin-release\* -DestinationPath QuickLook.Plugin.ImageViewer.Release.zip
 
       - name: Upload build artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: QuickLook-ImageViewer-Plugin
           path: QuickLook.Plugin.ImageViewer.Release.zip
