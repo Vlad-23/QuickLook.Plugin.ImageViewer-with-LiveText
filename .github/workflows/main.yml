@@ -1,4 +1,4 @@
-name: Build QuickLook Plugin
+name: Build QuickLook Plugin ImageViewer with LiveText
 
 on:
   push:
@@ -19,28 +19,10 @@ jobs:
       with:
         dotnet-version: 8.0.x
 
-    - name: Install GitVersion
+    - name: Setup GitVersion
       uses: gittools/actions/gitversion/setup@v3
       with:
         versionSpec: '5.x'
 
-    - name: Determine GitVersion
+    - name: Run GitVersion
       id: gitversion
-      uses: gittools/actions/gitversion/execute@v3
-
-    - name: Generate GitVersion.cs
-      run: |
-        echo using System.Reflection; > GitVersion.cs
-        echo [assembly: AssemblyInformationalVersion("${{ steps.gitversion.outputs.fullSemVer }}")] >> GitVersion.cs
-        echo [assembly: AssemblyVersion("${{ steps.gitversion.outputs.assemblySemVer }}")] >> GitVersion.cs
-        echo [assembly: AssemblyFileVersion("${{ steps.gitversion.outputs.assemblySemFileVer }}")] >> GitVersion.cs
-
-    - name: Move GitVersion.cs to expected location
-      run: |
-        move GitVersion.cs QuickLook.Plugin.ImageViewer-with-LiveText\..\GitVersion.cs
-
-    - name: Restore
-      run: dotnet restore
-
-    - name: Build
-      run: dotnet build --configuration Release --no-restore
