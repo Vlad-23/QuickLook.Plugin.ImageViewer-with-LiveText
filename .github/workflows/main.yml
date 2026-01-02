@@ -16,27 +16,25 @@ jobs:
           New-Item -Path "../../GitVersion.cs" -ItemType File -Force -Value $content
         shell: pwsh
 
-      - name: Download QuickLook Dependencies
-        run: |
-          Invoke-WebRequest -Uri "https://github.com/QL-Win/QuickLook/releases/download/3.7.1/QuickLook.Zip.zip" -OutFile "QL.zip"
-          Expand-Archive -Path "QL.zip" -DestinationPath "$pwd/QL_Base"
-          $projDir = Get-ChildItem -Recurse -Filter "*.csproj" | Select-Object -First 1 | ForEach-Object { $_.Directory.FullName }
-          $libDir = New-Item -ItemType Directory -Force -Path "$projDir/libs"
-          Copy-Item "QL_Base/QuickLook.Common.dll" -Destination "$projDir/"
-          Copy-Item "QL_Base/QuickLook.Common.dll" -Destination "$libDir/"
-        shell: pwsh
-
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
 
       - name: Setup NuGet
         uses: nuget/setup-nuget@v2
 
+      - name: Install QuickLook Common
+        run: |
+          # This pulls the missing library directly from the NuGet gallery
+          nuget install QuickLook.Common -Version 3.7.0 -OutputDirectory packages
+        shell: pwsh
+
       - name: Restore and Build
         run: |
           $projectFile = Get-ChildItem -Recurse -Filter *.csproj | Select-Object -First 1
           nuget restore $($projectFile.FullName)
-          msbuild $($projectFile.FullName) /p:Configuration=Release /p:Platform="Any CPU" /p:ReferencePath="$pwd/QL_Base"
+          
+          # We tell MSBuild to look in the newly created packages folder for the DLLs
+          msbuild $($projectFile.FullName) /p:Configuration=Release /p:Platform="Any CPU" /p:ReferencePath="$pwd/packages/QuickLook.Common.3.7.0/lib/net462"
         shell: pwsh
 
       - name: Upload Finished Plugin
