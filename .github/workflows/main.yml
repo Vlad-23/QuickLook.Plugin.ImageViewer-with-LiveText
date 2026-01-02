@@ -15,10 +15,10 @@ jobs:
         uses: nuget/setup-nuget@v2
 
       - name: Restore NuGet Packages
-        run: nuget restore QuickLook.Plugin.ImageViewer.sln
+        run: nuget restore *.sln
 
       - name: Build Solution
-        run: msbuild QuickLook.Plugin.ImageViewer.sln /p:Configuration=Release /p:Platform="Any CPU"
+        run: msbuild *.sln /p:Configuration=Release /p:Platform="Any CPU"
 
       - name: Upload Finished Plugin
         uses: actions/upload-artifact@v4
