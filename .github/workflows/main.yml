@@ -24,20 +24,5 @@ jobs:
       with:
         versionSpec: '5.x'
 
-    - name: Run GitVersion
-      id: gitversion
+    - name: Run GitVersion (MSBuild mode)
       uses: gittools/actions/gitversion/execute@v3
-
-    - name: Generate GitVersion.cs (repo root)
-      shell: pwsh
-      run: |
-        Set-Content GitVersion.cs "using System.Reflection;"
-        Add-Content GitVersion.cs "[assembly: AssemblyInformationalVersion(""${{ steps.gitversion.outputs.fullSemVer }}"")]"
-        Add-Content GitVersion.cs "[assembly: AssemblyVersion(""${{ steps.gitversion.outputs.assemblySemVer }}"")]"
-        Add-Content GitVersion.cs "[assembly: AssemblyFileVersion(""${{ steps.gitversion.outputs.assemblySemFileVer }}"")]"
-
-    - name: Restore
-      run: dotnet restore
-
-    - name: Build
-      run: dotnet build --configuration Release --no-restore
