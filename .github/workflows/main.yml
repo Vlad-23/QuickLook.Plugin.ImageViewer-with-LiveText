@@ -20,4 +20,15 @@ jobs:
         dotnet-version: 8.0.x
 
     - name: Setup GitVersion
-      uses: g
+      uses: gittools/actions/gitversion/setup@v3
+      with:
+        versionSpec: '5.x'
+
+    - name: Run GitVersion (MSBuild mode)
+      uses: gittools/actions/gitversion/execute@v3
+
+    - name: Restore
+      run: dotnet restore
+
+    - name: Build (Release)
+      run: dotnet build --configuration Release --no-restore
