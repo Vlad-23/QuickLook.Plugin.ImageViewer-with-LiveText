@@ -1,25 +1,56 @@
-- name: List Files for Debugging
-      run: dir /s # This will show us exactly where the .sln is in the logs
+name: Build and Release QuickLook Plugin
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup MSBuild
+      uses: microsoft/setup-msbuild@v2
+
+    - name: Setup NuGet
+      uses: NuGet/setup-nuget@v1
+
+    - name: Install GitVersion
+      uses: gittools/actions/gitversion/setup@v1
+      with:
+        versionSpec: '5.x'
+
+    - name: Locate Solution File
+      id: locate_sln
+      run: |
+        # Finding the .sln and saving the directory
+        $sln = Get-ChildItem -Recurse -Filter *.sln | Select-Object -First 1
+        if ($null -eq $sln) { throw "Solution file not found" }
+        echo "SLN_PATH=$($sln.FullName)" >> $env:GITHUB_ENV
+        echo "SLN_DIR=$($sln.DirectoryName)" >> $env:GITHUB_ENV
+        Write-Host "Found solution at: $($sln.FullName)"
 
     - name: Restore NuGet Packages
       run: |
-        # Search for the solution file specifically
-        $sln = Get-ChildItem -Recurse -Filter *.sln | Select-Object -First 1
-        if ($null -eq $sln) {
-          Write-Error "Could not find a .sln file in the repository!"
-          exit 1
-        }
-        Write-Host "Found solution at: $($sln.FullName)"
-        nuget restore "$($sln.FullName)"
-        echo "SLN_PATH=$($sln.FullName)" >> $env:GITHUB_ENV
+        nuget restore "${{ env.SLN_PATH }}"
 
     - name: Build Plugin
       run: |
-        # Use the absolute path found above
-        # Disabling AssemblyInfo and GitVersion generation to stop the CS2001 error
+        # FIX: We disable UpdateAssemblyInfo and GenerateGitVersionInformation 
+        # to prevent the CSC : error CS2001 (missing GitVersion.cs)
+        # We also set the OutputPath to ensure resources are bundled correctly
         msbuild "${{ env.SLN_PATH }}" `
-        /p:Configuration=Release `
-        /p:Platform="Any CPU" `
-        /p:UpdateAssemblyInfo=false `
-        /p:GenerateGitVersionInformation=false `
-        /p:GetFullMessage=true
+          /p:Configuration=Release `
+          /p:Platform="Any CPU" `
+          /p:UpdateAssemblyInfo=false `
+          /p:GenerateGitVersionInformation=false `
+          /p:GitVersion_NoFetchEnabled=true `
+          /p:OutDir="${{ github.workspace }}\build_output\"
