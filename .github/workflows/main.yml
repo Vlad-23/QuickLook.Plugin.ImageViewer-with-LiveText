@@ -1,48 +1,43 @@
-name: Build Plugin
-on: [push]
+name: Build QuickLook ImageViewer Plugin
+
+on:
+  push:
+    branches:
+      - main       # or your default branch
+  pull_request:
 
 jobs:
   build:
+    name: Build & Package Plugin
     runs-on: windows-latest
+
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Fix Missing GitVersion File
-        run: |
-          $content = 'using System.Reflection; [assembly: AssemblyVersion("1.0.0.0")] [assembly: AssemblyFileVersion("1.0.0.0")]'
-          New-Item -Path "GitVersion.cs" -ItemType File -Force -Value $content
-          New-Item -Path "../GitVersion.cs" -ItemType File -Force -Value $content
-          New-Item -Path "../../GitVersion.cs" -ItemType File -Force -Value $content
-        shell: pwsh
-
-      - name: Manually Fetch QuickLook.Common
-        run: |
-          # Create a directory for the missing library
-          New-Item -ItemType Directory -Force -Path "ExternalLibs"
-          # Download the DLL directly from the original project's GitHub storage
-          Invoke-WebRequest -Uri "https://github.com/QL-Win/QuickLook/raw/master/QuickLook.Common/bin/Release/QuickLook.Common.dll" -OutFile "ExternalLibs/QuickLook.Common.dll"
-        shell: pwsh
-
-      - name: Setup MSBuild
-        uses: microsoft/setup-msbuild@v2
-
-      - name: Setup NuGet
-        uses: nuget/setup-nuget@v2
-
-      - name: Restore and Build
-        run: |
-          $projectFile = Get-ChildItem -Recurse -Filter *.csproj | Select-Object -First 1
-          nuget restore $($projectFile.FullName)
-          
-          # Force MSBuild to look in our ExternalLibs folder for the missing reference
-          msbuild $($projectFile.FullName) /p:Configuration=Release /p:Platform="Any CPU" /p:ReferencePath="$pwd/ExternalLibs"
-        shell: pwsh
-
-      - name: Upload Finished Plugin
-        uses: actions/upload-artifact@v4
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3
         with:
-          name: Translated-LiveText-Plugin
-          path: |
-            **/*.qlplugin
-            **/bin/Release/
+          dotnet-version: '7.0.x'  # matches typical QuickLook plugin targets
+
+      - name: Restore dependencies
+        run: dotnet restore QuickLook.Plugin.ImageViewer.csproj
+
+      - name: Build project
+        run: dotnet build QuickLook.Plugin.ImageViewer.csproj --configuration Release
+
+      - name: Create output directory
+        run: |
+          mkdir plugin-release
+          xcopy /E /Y ".\bin\Release\net7.0\win-x64\*" "plugin-release\"
+
+      - name: Zip plugin
+        shell: powershell
+        run: |
+          Compress-Archive -Path plugin-release\* -DestinationPath QuickLook.Plugin.ImageViewer.Release.zip
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: QuickLook-ImageViewer-Plugin
+          path: QuickLook.Plugin.ImageViewer.Release.zip
