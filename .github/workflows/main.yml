@@ -1,60 +1,25 @@
-name: Build and Release Plugin
-
-on:
-  push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
-  workflow_dispatch:
-
-jobs:
-  build:
-    runs-on: windows-latest
-    
-    steps:
-    - name: Checkout Code
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0 # Critical for GitVersion to work
-
-    - name: Install GitVersion
-      uses: gittools/actions/gitversion/setup@v1
-      with:
-        versionSpec: '5.x'
-
-    - name: Execute GitVersion
-      uses: gittools/actions/gitversion/execute@v1
-      with:
-        # Disabling 'updateAssemblyInfo' avoids the CS2001: GitVersion.cs not found error
-        updateAssemblyInfo: false 
-
-    - name: Setup MSBuild
-      uses: microsoft/setup-msbuild@v2
-
-    - name: Setup NuGet
-      uses: NuGet/setup-nuget@v1
+- name: List Files for Debugging
+      run: dir /s # This will show us exactly where the .sln is in the logs
 
     - name: Restore NuGet Packages
       run: |
-        # This finds the .sln file even if it's in a subfolder
-        $slnPath = Get-ChildItem -Recurse -Filter *.sln | Select-Object -First 1 -ExpandProperty FullName
-        nuget restore "$slnPath"
-        echo "SLN_PATH=$slnPath" >> $env:GITHUB_ENV
+        # Search for the solution file specifically
+        $sln = Get-ChildItem -Recurse -Filter *.sln | Select-Object -First 1
+        if ($null -eq $sln) {
+          Write-Error "Could not find a .sln file in the repository!"
+          exit 1
+        }
+        Write-Host "Found solution at: $($sln.FullName)"
+        nuget restore "$($sln.FullName)"
+        echo "SLN_PATH=$($sln.FullName)" >> $env:GITHUB_ENV
 
     - name: Build Plugin
       run: |
-        # Uses the path discovered in the previous step
+        # Use the absolute path found above
+        # Disabling AssemblyInfo and GitVersion generation to stop the CS2001 error
         msbuild "${{ env.SLN_PATH }}" `
         /p:Configuration=Release `
         /p:Platform="Any CPU" `
         /p:UpdateAssemblyInfo=false `
-        /p:GenerateGitVersionInformation=false
-      # Disabling GenerateGitVersionInformation prevents MSBuild from looking for that missing .cs file
-
-    - name: Upload Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: QuickLook.Plugin.ImageViewer
-        path: |
-          **/bin/Release/*.qlplugin
-          **/bin/Release/*.dll
+        /p:GenerateGitVersionInformation=false `
+        /p:GetFullMessage=true
