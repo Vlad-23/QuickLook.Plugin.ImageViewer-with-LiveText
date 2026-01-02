@@ -21,30 +21,31 @@ jobs:
     - name: Setup NuGet
       uses: NuGet/setup-nuget@v1
 
+    - name: Create Missing GitVersion File
+      run: |
+        # The error looks for '..\..\GitVersion.cs' relative to the project file.
+        # We will create it in the root and one level up to be absolutely sure.
+        New-Item -Path "GitVersion.cs" -ItemType File -Force
+        New-Item -Path "../GitVersion.cs" -ItemType File -Force
+        echo "// Empty file to satisfy CSC" > GitVersion.cs
+
     - name: Restore and Build
       run: |
-        # 1. Find the solution or project file
+        # Find the project/solution
         $target = Get-ChildItem -Recurse -Include *.sln, *.csproj | Select-Object -First 1
-        if ($null -eq $target) { throw "No buildable file found!" }
-        Write-Host "Building: $($target.FullName)"
-
-        # 2. Restore
+        
         nuget restore "$($target.FullName)"
 
-        # 3. Build with flags to KILL the GitVersion error
-        # /p:GenerateGitVersionInformation=false prevents the search for GitVersion.cs
-        # /p:UpdateAssemblyInfo=false prevents writing to non-existent files
+        # We keep your foundational build logic but force the versioning off
         msbuild "$($target.FullName)" `
           /p:Configuration=Release `
           /p:Platform="Any CPU" `
           /p:GenerateGitVersionInformation=false `
           /p:UpdateAssemblyInfo=false `
-          /p:GetFullMessage=true `
           /p:OutputPath="${{ github.workspace }}\out\"
 
     - name: Upload Build Output
       uses: actions/upload-artifact@v4
       with:
-        name: QuickLook-Plugin-Fixed
+        name: QuickLook-Plugin-Package
         path: ${{ github.workspace }}\out\
-        
