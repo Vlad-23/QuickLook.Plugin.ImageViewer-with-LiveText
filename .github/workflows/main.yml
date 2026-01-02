@@ -21,22 +21,31 @@ jobs:
     - name: Setup NuGet
       uses: NuGet/setup-nuget@v1
 
-    - name: Create Missing GitVersion File
+    - name: Force Create GitVersion Files
       run: |
-        # The error looks for '..\..\GitVersion.cs' relative to the project file.
-        # We will create it in the root and one level up to be absolutely sure.
+        # 1. Create file in the current workspace root
         New-Item -Path "GitVersion.cs" -ItemType File -Force
+        
+        # 2. Create file in the parent of the workspace (to handle ..\..\ logic)
         New-Item -Path "../GitVersion.cs" -ItemType File -Force
-        echo "// Empty file to satisfy CSC" > GitVersion.cs
+        New-Item -Path "../../GitVersion.cs" -ItemType File -Force
+        
+        # 3. Find every directory containing a .csproj and put a GitVersion.cs two levels up from it
+        $projects = Get-ChildItem -Recurse -Filter *.csproj
+        foreach ($proj in $projects) {
+            $grandParent = $proj.Directory.Parent.Parent.FullName
+            if (-not (Test-Path $grandParent)) { New-Item -ItemType Directory -Path $grandParent -Force }
+            New-Item -Path "$grandParent\GitVersion.cs" -ItemType File -Force
+            Write-Host "Injected dummy file at: $grandParent\GitVersion.cs"
+        }
 
     - name: Restore and Build
       run: |
-        # Find the project/solution
         $target = Get-ChildItem -Recurse -Include *.sln, *.csproj | Select-Object -First 1
         
         nuget restore "$($target.FullName)"
 
-        # We keep your foundational build logic but force the versioning off
+        # We keep the flags as a backup, but the physical file is now the primary fix
         msbuild "$($target.FullName)" `
           /p:Configuration=Release `
           /p:Platform="Any CPU" `
@@ -47,5 +56,5 @@ jobs:
     - name: Upload Build Output
       uses: actions/upload-artifact@v4
       with:
-        name: QuickLook-Plugin-Package
+        name: QuickLook-Plugin-Final
         path: ${{ github.workspace }}\out\
