@@ -10,37 +10,32 @@ jobs:
     runs-on: windows-2025
 
     steps:
-      # 1. Create the base directory structure
-      - name: Setup Directory Structure
-        run: |
-          mkdir -p "workspace/QuickLook.Common"
-          mkdir -p "workspace/ImageViewer"
-          mkdir -p "workspace/QuickLook.Plugin.HtmlViewer"
-
-      # 2. Checkout the three required repositories
-      - name: Checkout ImageViewer (This Repo)
+      # 1. Checkout this repo into the root
+      - name: Checkout ImageViewer
         uses: actions/checkout@v4
         with:
-          path: workspace/ImageViewer
+          path: ImageViewer
 
+      # 2. Checkout Common into the root (so it's sibling to ImageViewer)
       - name: Checkout QuickLook.Common
         uses: actions/checkout@v4
         with:
           repository: QL-Win/QuickLook.Common
-          path: workspace/QuickLook.Common
+          path: QuickLook.Common
 
-      - name: Checkout HtmlViewer (Sparse)
+      # 3. Checkout HtmlViewer (Sparse)
+      - name: Checkout HtmlViewer
         uses: actions/checkout@v4
         with:
           repository: QL-Win/QuickLook
           sparse-checkout: QuickLook.Plugin/QuickLook.Plugin.HtmlViewer
-          path: workspace/temp_html
+          path: temp_html
 
-      # 3. Move HtmlViewer to the level your .csproj expects (..\QuickLook.Plugin.HtmlViewer)
+      # 4. Move HtmlViewer to the root
       - name: Align HtmlViewer Path
         shell: pwsh
         run: |
-          Move-Item -Path "workspace/temp_html/QuickLook.Plugin/QuickLook.Plugin.HtmlViewer/*" -Destination "workspace/QuickLook.Plugin.HtmlViewer/"
+          Move-Item -Path "temp_html/QuickLook.Plugin/QuickLook.Plugin.HtmlViewer" -Destination "./QuickLook.Plugin.HtmlViewer"
 
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
@@ -50,32 +45,37 @@ jobs:
       - name: Build
         shell: pwsh
         run: |
-          # Create GitVersion.cs where ..\..\GitVersion.cs can find it
+          # Create GitVersion.cs at the root where ..\..\GitVersion.cs looks
           $v = 'using System.Reflection; [assembly: AssemblyVersion("1.0.0.0")]'
-          New-Item -Path "workspace/GitVersion.cs" -ItemType File -Value $v -Force
+          New-Item -Path "GitVersion.cs" -ItemType File -Value $v -Force
 
-          # Navigate to project
-          cd workspace/ImageViewer
+          # RESTORE: We must restore each project individually because they are siblings
+          dotnet restore "QuickLook.Common/QuickLook.Common.csproj"
+          dotnet restore "QuickLook.Plugin.HtmlViewer/QuickLook.Plugin.HtmlViewer.csproj"
+          dotnet restore "ImageViewer/QuickLook.Plugin.ImageViewer.csproj"
 
-          # Restore packages (this restores dependencies too)
-          dotnet restore QuickLook.Plugin.ImageViewer.csproj
-
-          # Build Common - Bypassing the missing version script
-          echo "Building Common..."
-          msbuild "../QuickLook.Common/QuickLook.Common.csproj" `
+          # BUILD COMMON
+          msbuild "QuickLook.Common/QuickLook.Common.csproj" `
             /p:Configuration=Release /p:Platform="Any CPU" `
             /p:PreBuildEvent="" /p:PostBuildEvent=""
 
-          # Build HtmlViewer
-          echo "Building HtmlViewer..."
-          msbuild "../QuickLook.Plugin.HtmlViewer/QuickLook.Plugin.HtmlViewer.csproj" `
+          # BUILD HTMLVIEWER
+          msbuild "QuickLook.Plugin.HtmlViewer/QuickLook.Plugin.HtmlViewer.csproj" `
             /p:Configuration=Release /p:Platform="Any CPU" `
             /p:PreBuildEvent="" /p:PostBuildEvent=""
 
-          # Build Main Project
-          echo "Building Main Project..."
+          # BUILD MAIN PROJECT
+          cd ImageViewer
           msbuild QuickLook.Plugin.ImageViewer.csproj `
             /p:Configuration=Release `
             /p:Platform="Any CPU" `
             /p:PreBuildEvent="" `
-            /p
+            /p:PostBuildEvent="" `
+            /p:GenerateGitVersionInformation=false `
+            /p:OutputPath="../build_output/"
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: QuickLook.Plugin.ImageViewer
+          path: build_output/
