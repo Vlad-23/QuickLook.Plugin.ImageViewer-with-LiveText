@@ -13,44 +13,29 @@ jobs:
     - name: Checkout Your Plugin
       uses: actions/checkout@v4
       with:
-        path: plugin-repo
+        path: working_dir/plugin-repo # Moved deeper to satisfy ..\..\
 
-    - name: Checkout QuickLook Common (The Parent)
+    - name: Checkout QuickLook Common
       uses: actions/checkout@v4
       with:
         repository: QL-Win/QuickLook.Common
-        path: QuickLook.Common
-
-    - name: Checkout HtmlViewer (The Sibling)
-      uses: actions/checkout@v4
-      with:
-        repository: QL-Win/QuickLook
-        sparse-checkout: |
-          QuickLook.Plugin/QuickLook.Plugin.HtmlViewer
-        path: QuickLook.Plugin.HtmlViewer
+        path: QuickLook.Common # Now matches ..\..\QuickLook.Common from the plugin
 
     - name: Setup MSBuild
       uses: microsoft/setup-msbuild@v2
 
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: '8.0.x' # Matches standard QuickLook builds
-
     - name: Prepare Workspace & Build
       shell: pwsh
       run: |
-        # 1. Create the GitVersion.cs file exactly where the .csproj wants it (../../GitVersion.cs)
-        # Since we are in the root and the proj is in plugin-repo/, this is correct.
+        # 1. Create GitVersion.cs in the root
+        # This matches ..\..\GitVersion.cs relative to the project file
         New-Item -Path "GitVersion.cs" -ItemType File -Force
 
-        # 2. RESTORE: This generates the 'project.assets.json' file you were missing
-        # We run it on the folder containing the projects
-        dotnet restore ./plugin-repo/QuickLook.Plugin.ImageViewer.csproj
+        # 2. Restore and Build
+        # We target the project now sitting two levels down
+        dotnet restore ./working_dir/plugin-repo/QuickLook.Plugin.ImageViewer.csproj
 
-        # 3. BUILD
-        cd plugin-repo
-        msbuild QuickLook.Plugin.ImageViewer.csproj `
+        msbuild ./working_dir/plugin-repo/QuickLook.Plugin.ImageViewer.csproj `
           /p:Configuration=Release `
           /p:Platform="Any CPU" `
           /p:OutputPath="${{ github.workspace }}\build_output\"
