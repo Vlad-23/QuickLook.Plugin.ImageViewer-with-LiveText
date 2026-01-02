@@ -14,11 +14,17 @@ jobs:
       - name: Setup NuGet
         uses: nuget/setup-nuget@v2
 
-      - name: Restore NuGet Packages
-        run: nuget restore QuickLook.Plugin.ImageViewer/QuickLook.Plugin.ImageViewer.csproj
-
-      - name: Build Project
-        run: msbuild QuickLook.Plugin.ImageViewer/QuickLook.Plugin.ImageViewer.csproj /p:Configuration=Release /p:Platform="Any CPU"
+      - name: Restore and Build
+        run: |
+          # Find the project file dynamically
+          $projectFile = Get-ChildItem -Recurse -Filter *.csproj | Select-Object -First 1
+          Write-Host "Found project file: $($projectFile.FullName)"
+          
+          # Restore dependencies
+          nuget restore $projectFile.FullName
+          
+          # Build the project
+          msbuild $projectFile.FullName /p:Configuration=Release /p:Platform="Any CPU"
 
       - name: Upload Finished Plugin
         uses: actions/upload-artifact@v4
