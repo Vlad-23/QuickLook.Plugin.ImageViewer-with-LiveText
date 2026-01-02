@@ -10,41 +10,44 @@ jobs:
     runs-on: windows-latest
     
     steps:
-    - name: Checkout Code
+    - name: Checkout Your Plugin
       uses: actions/checkout@v4
       with:
-        fetch-depth: 0
+        path: plugin-repo  # Puts your code in a subfolder
+
+    - name: Checkout QuickLook Common (The Parent)
+      uses: actions/checkout@v4
+      with:
+        repository: QL-Win/QuickLook.Common
+        path: QuickLook.Common  # Puts the parent where the dots ..\..\ expect it
+
+    - name: Checkout HtmlViewer (The Sibling)
+      uses: actions/checkout@v4
+      with:
+        repository: QL-Win/QuickLook
+        sparse-checkout: |
+          QuickLook.Plugin/QuickLook.Plugin.HtmlViewer
+        path: QuickLook.Plugin.HtmlViewer
 
     - name: Setup MSBuild
       uses: microsoft/setup-msbuild@v2
 
-    - name: Get Core Dependencies
-      shell: pwsh
+    - name: Prepare Workspace & Build
       run: |
-        # 1. Download the latest QuickLook release to get the 'Common' and 'Plugin' DLLs
-        $url = "https://github.com/QL-Win/QuickLook/releases/download/3.7.3/QuickLook.Zip.zip"
-        Invoke-WebRequest -Uri $url -OutFile "QuickLook.zip"
-        
-        # 2. Extract it to a temporary folder
-        Expand-Archive -Path "QuickLook.zip" -DestinationPath "./temp_ql"
-        
-        # 3. Create a 'ref' folder and move the necessary DLLs there
-        mkdir ref
-        Copy-Item "./temp_ql/QuickLook.Common.dll" -Destination "./ref/"
-        Copy-Item "./temp_ql/QuickLook.Plugin.dll" -Destination "./ref/"
-        Write-Host "Core DLLs extracted to ./ref folder"
-
-    - name: Fix GitVersion & Build
-      run: |
-        # Create the missing version file to stop the CS2001 error
+        # 1. Create the GitVersion.cs file at the root (..\..\GitVersion.cs)
         New-Item -Path "GitVersion.cs" -ItemType File -Force
 
-        # Build the project, pointing to our newly extracted reference DLLs
+        # 2. Move things so the relative paths match the .csproj
+        # Your proj is in ./plugin-repo/
+        # It looks for ../../QuickLook.Common
+        # So we leave QuickLook.Common in the root.
+
+        cd plugin-repo
+        
+        # 3. Build using the project file
         msbuild QuickLook.Plugin.ImageViewer.csproj `
           /p:Configuration=Release `
           /p:Platform="Any CPU" `
-          /p:ReferencePath="${{ github.workspace }}\ref" `
-          /p:GenerateGitVersionInformation=false `
           /p:OutputPath="${{ github.workspace }}\build_output\"
 
     - name: Upload Finished Plugin
