@@ -1,18 +1,65 @@
-- name: Checkout Main Plugin
-  uses: actions/checkout@v4
-  with:
-    path: QuickLook.Plugin.ImageViewer-with-LiveText
+name: Build Plugin
 
-- name: Checkout Common
-  uses: actions/checkout@v4
-  with:
-    repository: QL-Win/QuickLook.Common
-    # This places it at the same level as the plugin folder
-    path: QuickLook.Common 
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
 
-- name: Checkout HtmlViewer
-  uses: actions/checkout@v4
-  with:
-    repository: QL-Win/QuickLook
-    sparse-checkout: QuickLook.Plugin/QuickLook.Plugin.HtmlViewer
-    path: QuickLook.Plugin.HtmlViewer
+jobs:
+  build:
+    runs-on: windows-2025
+
+    steps:
+      # 1. Checkout the main plugin to a flat folder
+      - name: Checkout Plugin
+        uses: actions/checkout@v4
+        with:
+          path: QuickLook.Plugin.ImageViewer-with-LiveText
+
+      # 2. Checkout Common as a sibling to the plugin
+      - name: Checkout QuickLook.Common
+        uses: actions/checkout@v4
+        with:
+          repository: QL-Win/QuickLook.Common
+          path: QuickLook.Common
+
+      # 3. Checkout HtmlViewer as a sibling
+      - name: Checkout HtmlViewer
+        uses: actions/checkout@v4
+        with:
+          repository: QL-Win/QuickLook
+          sparse-checkout: QuickLook.Plugin/QuickLook.Plugin.HtmlViewer
+          path: QuickLook.Plugin.HtmlViewer
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+        with:
+          msbuild-architecture: x86
+
+      - name: Prepare and Build
+        shell: pwsh
+        run: |
+          # 1. Create GitVersion.cs at the root level so ../../GitVersion.cs works
+          $content = 'using System.Reflection; [assembly: AssemblyVersion("1.0.0.0")] [assembly: AssemblyFileVersion("1.0.0.0")]'
+          New-Item -Path "GitVersion.cs" -ItemType File -Value $content -Force
+
+          # 2. Restore
+          dotnet restore QuickLook.Plugin.ImageViewer-with-LiveText/QuickLook.Plugin.ImageViewer.csproj
+
+          # 3. Build
+          # Output path is set to a dedicated folder for easy artifact collection
+          msbuild QuickLook.Plugin.ImageViewer-with-LiveText/QuickLook.Plugin.ImageViewer.csproj `
+            /p:Configuration=Release `
+            /p:Platform="Any CPU" `
+            /p:PreBuildEvent="" `
+            /p:PostBuildEvent="" `
+            /p:GenerateGitVersionInformation=false `
+            /p:OutputPath="${{ github.workspace }}\build_output\"
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: QuickLook.Plugin.ImageViewer
+          path: build_output/
