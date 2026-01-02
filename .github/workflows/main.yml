@@ -16,29 +16,33 @@ jobs:
           New-Item -Path "../../GitVersion.cs" -ItemType File -Force -Value $content
         shell: pwsh
 
+      - name: Manually Fetch QuickLook.Common
+        run: |
+          # Create a directory for the missing library
+          New-Item -ItemType Directory -Force -Path "ExternalLibs"
+          # Download the DLL directly from the original project's GitHub storage
+          Invoke-WebRequest -Uri "https://github.com/QL-Win/QuickLook/raw/master/QuickLook.Common/bin/Release/QuickLook.Common.dll" -OutFile "ExternalLibs/QuickLook.Common.dll"
+        shell: pwsh
+
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
 
       - name: Setup NuGet
         uses: nuget/setup-nuget@v2
 
-      - name: Install QuickLook Common
-        run: |
-          # This pulls the missing library directly from the NuGet gallery
-          nuget install QuickLook.Common -Version 3.7.0 -OutputDirectory packages
-        shell: pwsh
-
       - name: Restore and Build
         run: |
           $projectFile = Get-ChildItem -Recurse -Filter *.csproj | Select-Object -First 1
           nuget restore $($projectFile.FullName)
           
-          # We tell MSBuild to look in the newly created packages folder for the DLLs
-          msbuild $($projectFile.FullName) /p:Configuration=Release /p:Platform="Any CPU" /p:ReferencePath="$pwd/packages/QuickLook.Common.3.7.0/lib/net462"
+          # Force MSBuild to look in our ExternalLibs folder for the missing reference
+          msbuild $($projectFile.FullName) /p:Configuration=Release /p:Platform="Any CPU" /p:ReferencePath="$pwd/ExternalLibs"
         shell: pwsh
 
       - name: Upload Finished Plugin
         uses: actions/upload-artifact@v4
         with:
           name: Translated-LiveText-Plugin
-          path: "**/*.qlplugin"
+          path: |
+            **/*.qlplugin
+            **/bin/Release/
