@@ -1,67 +1,29 @@
-name: Build Plugin
-
-on:
-  push:
-    branches: [ main ]
-  workflow_dispatch:
-
-jobs:
-  build:
-    runs-on: windows-2025
-
-    steps:
-      # 1. Setup the directory tree
-      # Level 0: QuickLook.Common & GitVersion.cs
-      # Level 1: QuickLook.Plugin.HtmlViewer & ImageViewer (your repo)
-      - name: Checkout Repositories
-        run: |
-          mkdir -p "workspace/QuickLook.Common"
-          mkdir -p "workspace/ImageViewer"
-          mkdir -p "workspace/QuickLook.Plugin.HtmlViewer"
-
-      - name: Checkout ImageViewer (Main)
-        uses: actions/checkout@v4
-        with:
-          path: workspace/ImageViewer
-
-      - name: Checkout QuickLook.Common
-        uses: actions/checkout@v4
-        with:
-          repository: QL-Win/QuickLook.Common
-          path: workspace/QuickLook.Common
-
-      - name: Checkout HtmlViewer
-        uses: actions/checkout@v4
-        with:
-          repository: QL-Win/QuickLook
-          sparse-checkout: QuickLook.Plugin/QuickLook.Plugin.HtmlViewer
-          path: workspace/temp_html
-      
-      - name: Align HtmlViewer Path
+- name: Build
         shell: pwsh
         run: |
-          # Move the nested sparse-checkout folder to the level expected by ..\
-          Move-Item -Path "workspace/temp_html/QuickLook.Plugin/QuickLook.Plugin.HtmlViewer/*" -Destination "workspace/QuickLook.Plugin.HtmlViewer/"
-
-      - name: Setup MSBuild
-        uses: microsoft/setup-msbuild@v2
-
-      - name: Build
-        shell: pwsh
-        run: |
-          # Create GitVersion.cs at Level 0 (..\..\ from the project)
+          # 1. Create GitVersion.cs at Level 0
           $v = 'using System.Reflection; [assembly: AssemblyVersion("1.0.0.0")]'
           New-Item -Path "workspace/GitVersion.cs" -ItemType File -Value $v -Force
 
-          # Build dependencies so the DLLs/Namespaces exist
-          msbuild "workspace/QuickLook.Common/QuickLook.Common.csproj" /p:Configuration=Release /p:Platform="Any CPU"
-          msbuild "workspace/QuickLook.Plugin.HtmlViewer/QuickLook.Plugin.HtmlViewer.csproj" /p:Configuration=Release /p:Platform="Any CPU"
+          # 2. Restore EVERYTHING at once
+          # This fixes the "assets file not found" for HtmlViewer and Common
+          dotnet restore "workspace/ImageViewer/QuickLook.Plugin.ImageViewer.csproj"
 
-          # Build Main Project
+          # 3. Build Common (Disabling the failing script)
+          echo "Building Common..."
+          msbuild "workspace/QuickLook.Common/QuickLook.Common.csproj" `
+            /p:Configuration=Release /p:Platform="Any CPU" `
+            /p:PreBuildEvent="" /p:PostBuildEvent=""
+
+          # 4. Build HtmlViewer
+          echo "Building HtmlViewer..."
+          msbuild "workspace/QuickLook.Plugin.HtmlViewer/QuickLook.Plugin.HtmlViewer.csproj" `
+            /p:Configuration=Release /p:Platform="Any CPU" `
+            /p:PreBuildEvent="" /p:PostBuildEvent=""
+
+          # 5. Build Main Project
+          echo "Building Main Project..."
           cd workspace/ImageViewer
-          dotnet restore QuickLook.Plugin.ImageViewer.csproj
-          
-          # We use the OutputPath from your csproj or override it here
           msbuild QuickLook.Plugin.ImageViewer.csproj `
             /p:Configuration=Release `
             /p:Platform="Any CPU" `
@@ -69,9 +31,3 @@ jobs:
             /p:PostBuildEvent="" `
             /p:GenerateGitVersionInformation=false `
             /p:OutputPath="../../build_output/"
-
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: QuickLook.Plugin.ImageViewer
-          path: workspace/build_output/
