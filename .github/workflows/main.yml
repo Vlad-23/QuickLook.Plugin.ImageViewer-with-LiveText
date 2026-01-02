@@ -1,60 +1,18 @@
-name: Build ImageViewer Plugin
+- name: Checkout Main Plugin
+  uses: actions/checkout@v4
+  with:
+    path: QuickLook.Plugin.ImageViewer-with-LiveText
 
-on:
-  push:
-    branches: [ "main" ]
-  workflow_dispatch:
+- name: Checkout Common
+  uses: actions/checkout@v4
+  with:
+    repository: QL-Win/QuickLook.Common
+    # This places it at the same level as the plugin folder
+    path: QuickLook.Common 
 
-jobs:
-  build:
-    runs-on: windows-latest
-    
-    steps:
-    - name: Checkout Your Plugin
-      uses: actions/checkout@v4
-      with:
-        # Puts your plugin directly in the root of the workspace
-        path: QuickLook.Plugin.ImageViewer-with-LiveText
-
-    - name: Checkout QuickLook Common
-      uses: actions/checkout@v4
-      with:
-        repository: QL-Win/QuickLook.Common
-        path: QuickLook.Common
-
-    - name: Checkout HtmlViewer (The Sibling)
-      uses: actions/checkout@v4
-      with:
-        repository: QL-Win/QuickLook
-        sparse-checkout: |
-          QuickLook.Plugin/QuickLook.Plugin.HtmlViewer
-        path: QuickLook.Plugin.HtmlViewer
-
-    - name: Setup MSBuild
-      uses: microsoft/setup-msbuild@v2
-
-    - name: Prepare & Build
-      shell: pwsh
-      run: |
-        # 1. Create GitVersion.cs at the root level.
-        # From inside the plugin folder, ../../GitVersion.cs will now point here.
-        $content = 'using System.Reflection; [assembly: AssemblyVersion("1.0.0.0")] [assembly: AssemblyFileVersion("1.0.0.0")]'
-        New-Item -Path "GitVersion.cs" -ItemType File -Value $content -Force
-
-        # 2. Restore using the project file
-        dotnet restore QuickLook.Plugin.ImageViewer-with-LiveText/QuickLook.Plugin.ImageViewer.csproj
-
-        # 3. Build with overridden paths to ensure success
-        msbuild QuickLook.Plugin.ImageViewer-with-LiveText/QuickLook.Plugin.ImageViewer.csproj `
-          /p:Configuration=Release `
-          /p:Platform="Any CPU" `
-          /p:PreBuildEvent="" `
-          /p:PostBuildEvent="" `
-          /p:GenerateGitVersionInformation=false `
-          /p:OutputPath="${{ github.workspace }}\build_output\"
-
-    - name: Upload Finished Plugin
-      uses: actions/upload-artifact@v4
-      with:
-        name: QuickLook-ImageViewer-Plugin
-        path: ${{ github.workspace }}\build_output\
+- name: Checkout HtmlViewer
+  uses: actions/checkout@v4
+  with:
+    repository: QL-Win/QuickLook
+    sparse-checkout: QuickLook.Plugin/QuickLook.Plugin.HtmlViewer
+    path: QuickLook.Plugin.HtmlViewer
