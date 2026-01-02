@@ -1,29 +1,54 @@
-name: Build QuickLook Plugin ImageViewer with LiveText
+name: Build and Release Plugin
 
 on:
   push:
+    branches: [ "main" ]
   pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: windows-latest
-
+    
     steps:
-    - uses: actions/checkout@v4
-
-    - uses: actions/setup-dotnet@v4
+    - name: Checkout Code
+      uses: actions/checkout@v4
       with:
-        dotnet-version: 8.0.x
+        fetch-depth: 0 # Required for GitVersion to see history
 
-    - name: Create GitVersion.cs where WPF wpftmp expects it
-      shell: pwsh
+    - name: Install GitVersion
+      uses: gittools/actions/gitversion/setup@v1
+      with:
+        versionSpec: '5.x'
+
+    - name: Execute GitVersion
+      uses: gittools/actions/gitversion/execute@v1
+
+    - name: Setup MSBuild
+      uses: microsoft/setup-msbuild@v2
+
+    - name: Setup NuGet
+      uses: NuGet/setup-nuget@v1
+
+    - name: Restore NuGet Packages
+      run: nuget restore QuickLook.Plugin.ImageViewer-with-LiveText.sln
+
+    # FIX: Prevent CS2001 by creating a dummy GitVersion.cs if the tool fails to place it correctly
+    # or by telling MSBuild to ignore the missing file if it's generated dynamically.
+    - name: Build Plugin
       run: |
-        $path = "QuickLook.Plugin.ImageViewer-with-LiveText/QuickLook.Plugin.ImageViewer-with-LiveText/obj"
-        New-Item -ItemType Directory -Force -Path $path | Out-Null
-        "" | Set-Content "$path/GitVersion.cs"
+        msbuild QuickLook.Plugin.ImageViewer-with-LiveText.sln `
+        /p:Configuration=Release `
+        /p:Platform="Any CPU" `
+        /p:UpdateAssemblyInfo=false `
+        /p:WriteVersionInfoToBuildLog=false
+      # Using UpdateAssemblyInfo=false prevents GitVersion from looking for/writing to specific .cs files that cause CS2001.
 
-    - name: Restore
-      run: dotnet restore
-
-    - name: Build Release
-      run: dotnet build --configuration Release --no-restore
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: QuickLook.Plugin.ImageViewer-with-LiveText
+        path: |
+          **/bin/Release/*.qlplugin
+          **/bin/Release/*.dll
