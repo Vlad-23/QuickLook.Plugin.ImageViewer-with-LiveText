@@ -9,26 +9,24 @@ jobs:
     runs-on: windows-latest
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+    - uses: actions/checkout@v4
       with:
         fetch-depth: 0
 
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v4
+    - uses: actions/setup-dotnet@v4
       with:
         dotnet-version: 8.0.x
 
-    - name: Setup GitVersion
-      uses: gittools/actions/gitversion/setup@v3
-      with:
-        versionSpec: '5.x'
-
-    - name: Run GitVersion (MSBuild mode)
-      uses: gittools/actions/gitversion/execute@v3
+    - name: Create required GitVersion.cs (stub)
+      shell: pwsh
+      run: |
+        $path = "GitVersion.cs"
+        if (-not (Test-Path $path)) {
+          "" | Set-Content $path
+        }
 
     - name: Restore
       run: dotnet restore
 
-    - name: Build (Release)
+    - name: Build Release
       run: dotnet build --configuration Release --no-restore
