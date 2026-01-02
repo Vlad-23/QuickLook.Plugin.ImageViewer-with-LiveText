@@ -1,4 +1,4 @@
-name: Build QuickLook Plugin
+name: Build ImageViewer Plugin
 
 on:
   push:
@@ -21,45 +21,34 @@ jobs:
     - name: Setup NuGet
       uses: NuGet/setup-nuget@v1
 
-    - name: Prepare Build Environment
+    - name: Resolve Missing Core Dependencies
       run: |
-        # FIX 1: Create dummy GitVersion files to stop the CS2001 error
-        # This satisfies the hardcoded requirement in your .csproj
+        # This downloads the official QuickLook.Common and QuickLook.Plugin DLLs
+        # which are the "Parent" libraries your code is looking for.
+        mkdir ql_libs
+        nuget install QuickLook.Plugin -Version 0.6.0 -OutputDirectory ./ql_libs
+        
+        # We find where NuGet put the DLLs and copy them to a central 'ref' folder
+        mkdir ref
+        Get-ChildItem -Path ./ql_libs -Filter *.dll -Recurse | Copy-Item -Destination ./ref/
+        Write-Host "Dependencies ready in ./ref folder"
+
+    - name: Fix GitVersion & Build
+      run: |
+        # 1. Satisfy the GitVersion.cs requirement (The CS2001 error)
         New-Item -Path "GitVersion.cs" -ItemType File -Force
-        $projects = Get-ChildItem -Recurse -Filter *.csproj
-        foreach ($proj in $projects) {
-            $grandParent = $proj.Directory.Parent.Parent.FullName
-            if (-not (Test-Path $grandParent)) { New-Item -ItemType Directory -Path $grandParent -Force }
-            New-Item -Path "$grandParent\GitVersion.cs" -ItemType File -Force
-        }
 
-        # FIX 2: Download official QuickLook dependencies
-        # This solves the 'QuickLook.Common' and 'IViewer' missing errors
-        nuget install QuickLook.Plugin -Version 0.6.0 -OutputDirectory ./deps
-        
-        # Locate the DLLs and move them to a common reference folder
-        $binDir = Get-ChildItem -Path ./deps -Filter QuickLook.Common.dll -Recurse | Select-Object -First 1
-        mkdir ref_libs
-        copy "$($binDir.Directory.FullName)\*.dll" "ref_libs\"
-        Write-Host "Successfully prepared dependencies in ref_libs folder."
-
-    - name: Restore and Build
-      run: |
-        $target = Get-ChildItem -Recurse -Include *.sln, *.csproj | Select-Object -First 1
-        
-        nuget restore "$($target.FullName)"
-
-        # FIX 3: Force MSBuild to look in our 'ref_libs' folder for the missing DLLs
-        msbuild "$($target.FullName)" `
+        # 2. Build while forcing the compiler to look in our new 'ref' folder
+        # This solves the 59 errors (Missing Common, IViewer, etc.)
+        msbuild QuickLook.Plugin.ImageViewer.csproj `
           /p:Configuration=Release `
           /p:Platform="Any CPU" `
-          /p:ReferencePath="${{ github.workspace }}\ref_libs" `
+          /p:ReferencePath="${{ github.workspace }}\ref" `
           /p:GenerateGitVersionInformation=false `
-          /p:UpdateAssemblyInfo=false `
-          /p:OutputPath="${{ github.workspace }}\out\"
+          /p:OutputPath="${{ github.workspace }}\build_output\"
 
-    - name: Upload Build Output
+    - name: Upload Finished Plugin
       uses: actions/upload-artifact@v4
       with:
-        name: QuickLook-Plugin-Installer
-        path: ${{ github.workspace }}\out\
+        name: QuickLook-ImageViewer-Plugin
+        path: ${{ github.workspace }}\build_output\
