@@ -10,44 +10,28 @@ jobs:
     runs-on: windows-2025
 
     steps:
-      # 1. Place this repo in a folder named 'ImageViewer'
-      - name: Checkout ImageViewer
-        uses: actions/checkout@v4
-        with:
-          path: ImageViewer
-
-      # 2. Place Common in a folder named 'QuickLook.Common'
-      - name: Checkout QuickLook.Common
-        uses: actions/checkout@v4
-        with:
-          repository: QL-Win/QuickLook.Common
-          path: QuickLook.Common
-
-      # 3. Place the whole QuickLook repo in a temp folder to extract HtmlViewer
-      - name: Checkout HtmlViewer
-        uses: actions/checkout@v4
-        with:
-          repository: QL-Win/QuickLook
-          path: temp_ql
-          sparse-checkout: QuickLook.Plugin/QuickLook.Plugin.HtmlViewer
-
-      # 4. Move HtmlViewer so it is a sibling to the others
-      - name: Align HtmlViewer Path
+      - name: Checkout All Repos
         shell: pwsh
         run: |
-          Move-Item -Path "temp_ql/QuickLook.Plugin/QuickLook.Plugin.HtmlViewer" -Destination "./QuickLook.Plugin.HtmlViewer"
+          # Clone everything into the current directory clearly
+          git clone https://github.com/Vlad-23/QuickLook.Plugin.ImageViewer-with-LiveText ImageViewer
+          git clone https://github.com/QL-Win/QuickLook.Common QuickLook.Common
+          
+          # Extract HtmlViewer
+          git clone --depth 1 https://github.com/QL-Win/QuickLook temp_ql
+          xcopy /E /I temp_ql\QuickLook.Plugin\QuickLook.Plugin.HtmlViewer QuickLook.Plugin.HtmlViewer
 
-      # 5. Create the Version file at the ROOT
-      - name: Create Version File
+      - name: Create Version File (Force Absolute Root)
         shell: pwsh
         run: |
           $v = 'using System.Reflection; [assembly: AssemblyVersion("1.0.0.0")]'
-          # Placing it here satisfies ..\GitVersion.cs AND ..\..\GitVersion.cs
+          # Create it in the current folder
           New-Item -Path "GitVersion.cs" -ItemType File -Value $v -Force
-          # Also place it inside the project folders just in case the .csproj uses a single ..\
-          Copy-Item "GitVersion.cs" -Destination "QuickLook.Common/GitVersion.cs"
-          Copy-Item "GitVersion.cs" -Destination "QuickLook.Plugin.HtmlViewer/GitVersion.cs"
-          Copy-Item "GitVersion.cs" -Destination "ImageViewer/GitVersion.cs"
+          # Create it one level up just in case
+          New-Item -Path "../GitVersion.cs" -ItemType File -Value $v -Force
+          # Put it in the specific places projects look
+          New-Item -Path "QuickLook.Common/GitVersion.cs" -ItemType File -Value $v -Force
+          New-Item -Path "QuickLook.Plugin.HtmlViewer/GitVersion.cs" -ItemType File -Value $v -Force
 
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
@@ -55,16 +39,16 @@ jobs:
       - name: Restore and Build
         shell: pwsh
         run: |
-          # Restore the main project (this triggers dependency discovery)
+          # We must restore Common and HtmlViewer EXPLICITLY because they are siblings
+          dotnet restore "QuickLook.Common/QuickLook.Common.csproj"
+          dotnet restore "QuickLook.Plugin.HtmlViewer/QuickLook.Plugin.HtmlViewer.csproj"
           dotnet restore "ImageViewer/QuickLook.Plugin.ImageViewer.csproj"
 
-          # Build Common first (Bypass missing version scripts)
+          # Build in order
           msbuild "QuickLook.Common/QuickLook.Common.csproj" /p:Configuration=Release /p:PreBuildEvent="" /p:PostBuildEvent=""
-
-          # Build HtmlViewer second
           msbuild "QuickLook.Plugin.HtmlViewer/QuickLook.Plugin.HtmlViewer.csproj" /p:Configuration=Release /p:PreBuildEvent="" /p:PostBuildEvent=""
-
-          # Build Main Project last
+          
+          # Final Project
           msbuild "ImageViewer/QuickLook.Plugin.ImageViewer.csproj" `
             /p:Configuration=Release `
             /p:Platform="Any CPU" `
