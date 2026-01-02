@@ -23,34 +23,41 @@ jobs:
     - name: Setup NuGet
       uses: NuGet/setup-nuget@v1
 
-    - name: Install GitVersion
-      uses: gittools/actions/gitversion/setup@v1
-      with:
-        versionSpec: '5.x'
+    # This step will help us see exactly where your files are if the build fails
+    - name: Directory Listing Debug
+      run: Get-ChildItem -Recurse | Select-Object FullName
 
-    - name: Locate Solution File
-      id: locate_sln
+    - name: Locate and Restore
       run: |
-        # Finding the .sln and saving the directory
-        $sln = Get-ChildItem -Recurse -Filter *.sln | Select-Object -First 1
-        if ($null -eq $sln) { throw "Solution file not found" }
-        echo "SLN_PATH=$($sln.FullName)" >> $env:GITHUB_ENV
-        echo "SLN_DIR=$($sln.DirectoryName)" >> $env:GITHUB_ENV
-        Write-Host "Found solution at: $($sln.FullName)"
+        # Search for any .sln file in the workspace
+        $sln = Get-ChildItem -Path ${{ github.workspace }} -Filter *.sln -Recurse | Select-Object -First 1
+        
+        if ($null -eq $sln) {
+            Write-Host "No .sln found, searching for .csproj instead..."
+            $sln = Get-ChildItem -Path ${{ github.workspace }} -Filter *.csproj -Recurse | Select-Object -First 1
+        }
 
-    - name: Restore NuGet Packages
-      run: |
-        nuget restore "${{ env.SLN_PATH }}"
+        if ($null -eq $sln) {
+            throw "Could not find any Solution (.sln) or Project (.csproj) file!"
+        }
+
+        Write-Host "Target found at: $($sln.FullName)"
+        echo "TARGET_PATH=$($sln.FullName)" >> $env:GITHUB_ENV
+        nuget restore "$($sln.FullName)"
 
     - name: Build Plugin
       run: |
-        # FIX: We disable UpdateAssemblyInfo and GenerateGitVersionInformation 
-        # to prevent the CSC : error CS2001 (missing GitVersion.cs)
-        # We also set the OutputPath to ensure resources are bundled correctly
-        msbuild "${{ env.SLN_PATH }}" `
+        # We disable GitVersion generation to bypass the CS2001 error
+        # We also force the output to a specific 'dist' folder
+        msbuild "${{ env.TARGET_PATH }}" `
           /p:Configuration=Release `
           /p:Platform="Any CPU" `
           /p:UpdateAssemblyInfo=false `
           /p:GenerateGitVersionInformation=false `
-          /p:GitVersion_NoFetchEnabled=true `
-          /p:OutDir="${{ github.workspace }}\build_output\"
+          /p:OutputPath="${{ github.workspace }}\dist\"
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: QuickLook-Plugin-Output
+        path: ${{ github.workspace }}\dist\
