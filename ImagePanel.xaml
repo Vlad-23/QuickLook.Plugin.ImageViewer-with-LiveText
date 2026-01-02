@@ -68,7 +68,7 @@
                                              Meta="{Binding Meta, ElementName=imagePanel}"
                                              RenderOptions.BitmapScalingMode="{Binding RenderMode, ElementName=imagePanel}"
                                              Stretch="None" />
-                <!-- LiveText叠加层 -->
+                <!-- LiveText Overlay Layer -->
                 <liveText:LiveTextOverlay x:Name="liveTextOverlay"
                                           Visibility="Collapsed"
                                           IsHitTestVisible="False"
@@ -122,7 +122,7 @@
                     Content="&#xE746;"
                     Style="{StaticResource CaptionButtonStyle}"
                     Visibility="{Binding ElementName=imagePanel, Path=ReverseColorVisibility}" />
-            <!-- 实况文本按钮 -->
+            <!-- Live Text Button -->
             <Button x:Name="buttonLiveText"
                     Width="24"
                     Height="24"
@@ -131,7 +131,7 @@
                     VerticalAlignment="Top"
                     Content="&#xE13E;"
                     Style="{StaticResource CaptionButtonStyle}"
-                    ToolTip="实况文本 (将图片中文字转为可复制状态)"
+                    ToolTip="Live Text (Make text in image selectable and copyable)"
                     Visibility="{Binding ElementName=imagePanel, Path=LiveTextVisibility}" />
             <Button x:Name="buttonMeta"
                     Width="24"
@@ -145,7 +145,7 @@
                     Height="24"
                     Margin="0,0,8,0"
                     Content="&#xE7AD;"
-                    ToolTip="旋转图片"
+                    ToolTip="Rotate Image"
                     Style="{StaticResource CaptionButtonStyle}"
                     Visibility="{Binding ElementName=imagePanel, Path=RotateIconVisibility}" />
             <Button x:Name="buttonBackgroundColour"
@@ -153,7 +153,7 @@
                     Height="24"
                     Margin="0,0,8,0"
                     Content="&#xEF1F;"
-                    ToolTip="切换背景"
+                    ToolTip="Toggle Background (Checkerboard/Solid)"
                     Style="{StaticResource CaptionButtonStyle}"
                     Visibility="{Binding ElementName=imagePanel, Path=BackgroundVisibility}" />
         </StackPanel>
