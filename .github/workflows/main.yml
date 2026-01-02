@@ -1,9 +1,7 @@
-name: Build QuickLook ImageViewer Plugin
+name: Build QuickLook Plugin
 
 on:
   push:
-    branches:
-      - main
   pull_request:
 
 jobs:
@@ -11,32 +9,38 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0   # REQUIRED for GitVersion
 
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v3
-        with:
-          dotnet-version: '7.0.x'
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 8.0.x
 
-      - name: Restore dependencies
-        run: dotnet restore QuickLook.Plugin.ImageViewer.csproj
+    - name: Install GitVersion
+      uses: gittools/actions/gitversion/setup@v3
+      with:
+        versionSpec: '5.x'
 
-      - name: Build project
-        run: dotnet build QuickLook.Plugin.ImageViewer.csproj --configuration Release
+    - name: Determine GitVersion
+      id: gitversion
+      uses: gittools/actions/gitversion/execute@v3
 
-      - name: Create output directory
-        run: |
-          mkdir plugin-release
-          xcopy /E /Y ".\bin\Release\net7.0\win-x64\*" "plugin-release\"
+    - name: Generate GitVersion.cs
+      run: |
+        echo using System.Reflection; > GitVersion.cs
+        echo [assembly: AssemblyInformationalVersion("${{ steps.gitversion.outputs.fullSemVer }}")] >> GitVersion.cs
+        echo [assembly: AssemblyVersion("${{ steps.gitversion.outputs.assemblySemVer }}")] >> GitVersion.cs
+        echo [assembly: AssemblyFileVersion("${{ steps.gitversion.outputs.assemblySemFileVer }}")] >> GitVersion.cs
 
-      - name: Zip plugin
-        shell: powershell
-        run: |
-          Compress-Archive -Path plugin-release\* -DestinationPath QuickLook.Plugin.ImageViewer.Release.zip
+    - name: Move GitVersion.cs to expected location
+      run: |
+        move GitVersion.cs QuickLook.Plugin.ImageViewer-with-LiveText\..\GitVersion.cs
 
-      - name: Upload build artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: QuickLook-ImageViewer-Plugin
-          path: QuickLook.Plugin.ImageViewer.Release.zip
+    - name: Restore
+      run: dotnet restore
+
+    - name: Build
+      run: dotnet build --configuration Release --no-restore
